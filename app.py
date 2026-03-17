@@ -168,8 +168,7 @@ with tab1:
                 with st.spinner(t("실행 중... 🧠🛠️", "Executing... 🧠🛠️")):
                     try:
                         history_for_agent = [{"role": m["role"], "content": m["content"]} for m in st.session_state[chat_memory_key][-10:]]
-                        system_injection = f"\n[Tools: {tools_str}]\n[Rule] All your responses must be strictly in '{app_lang}'."
-                        action_type, text1, text2 = active_lobster.think_and_act(full_prompt + system_injection, history_for_agent)
+                        action_type, text1, text2 = active_lobster.think_and_act(full_prompt, history_for_agent)
                         st.markdown(text1)
                         if action_type == "task": st.success(t("✅ 실무 작업 완료!", "✅ Task Executed!"))
                         final_memory = text1
@@ -313,12 +312,11 @@ with tab2:
         with st.container(border=True):
             st.markdown(st.session_state.final_report)
 
-
 # ------------------------------------------
 # [탭 3] 🏢 장기 프로젝트 사령부 (오픈클로 모드 CCTV)
 # ------------------------------------------
 with tab3:
-    # 📌 1. 서버 엔진 컨트롤 패널 (새로 생긴 마법의 버튼!)
+    # 📌 1. 서버 엔진 컨트롤 패널
     st.subheader(t("⚙️ 지하실 워커(Worker) 엔진 컨트롤", "⚙️ Background Worker Engine Control"))
     
     current_pid = get_worker_pid()
@@ -336,7 +334,7 @@ with tab3:
             if st.button(t("⏹️ 워커 정지", "⏹️ Stop Worker"), use_container_width=True):
                 try:
                     import signal
-                    os.kill(current_pid, signal.SIGTERM) # 윈도우/맥/리눅스 모두 호환
+                    os.kill(current_pid, signal.SIGTERM) 
                     os.remove(PID_FILE)
                 except Exception as e:
                     st.warning(f"종료 실패 (이미 꺼져있을 수 있습니다): {e}")
@@ -344,7 +342,6 @@ with tab3:
                 st.rerun()
         else:
             if st.button(t("▶️ 워커 가동", "▶️ Start Worker"), type="primary", use_container_width=True):
-                # 백그라운드 프로세스 몰래 실행
                 p = subprocess.Popen([sys.executable, "worker.py"])
                 with open(PID_FILE, "w") as f:
                     f.write(str(p.pid))
@@ -376,7 +373,7 @@ with tab3:
 
     st.divider()
 
-    # 📌 3. 실시간 CCTV 모니터링 구역
+    # 📌 3. 실시간 CCTV 모니터링 구역 (HITL 피드백 주입 포함)
     col_dash, col_ref = st.columns([4, 1])
     with col_dash:
         st.subheader(t("📡 지하실 작업 현황판 (CCTV)", "📡 Underground Worker CCTV"))
@@ -392,11 +389,24 @@ with tab3:
             job_id, leader, workers_json, goal, status, logs, created_at = job
             workers = json.loads(workers_json)
             
-            status_color = "🟢" if status == "COMPLETED" else "🟡" if status == "RUNNING" else "🔴" if status == "FAILED" else "⚪"
+            status_color = "🟢" if status == "COMPLETED" else "🟡" if status == "RUNNING" else "🔴" if status == "FAILED" else "🛑" if status == "PAUSED" else "⚪"
             
-            with st.expander(f"{status_color} [Job #{job_id}] {goal[:30]}... ({status}) - {created_at}"):
+            with st.expander(f"{status_color} [Job #{job_id}] {goal[:30]}... ({status}) - {created_at}", expanded=(status=="PAUSED")):
                 st.caption(f"**👑 리더:** {leader} | **👷 실무자:** {', '.join(workers)}")
                 st.write(f"**목표:** {goal}")
                 st.markdown("---")
                 st.markdown("**📜 실시간 작업 로그**")
                 st.code(logs, language="markdown")
+                
+                # 📌 신규: 작업이 일시 정지(PAUSED) 되었을 때 나타나는 구명조끼 UI
+                if status == "PAUSED":
+                    st.error("🚨 에이전트가 사령관님의 도움을 요청했습니다! (위 로그의 SOS 메시지를 확인하세요)")
+                    feedback = st.text_input("사령관의 지시 및 정보 제공 (예: '이메일 주소는 abc@gmail.com이야', '해당 작업은 빼고 진행해')", key=f"fb_{job_id}")
+                    if st.button("▶️ 피드백 전송 및 작업 재개", key=f"btn_{job_id}", type="primary", use_container_width=True):
+                        if feedback:
+                            database.provide_feedback(job_id, feedback)
+                            st.success("✅ 명령이 하달되었습니다. 워커가 곧 처음부터 작업을 재개합니다!")
+                            time.sleep(1.5)
+                            st.rerun()
+                        else:
+                            st.warning("정보를 입력해주세요!")
