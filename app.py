@@ -2,17 +2,17 @@ import streamlit as st
 import json
 import os
 import time
+import subprocess # 📌 백그라운드 워커 실행용
+import sys        # 📌 현재 파이썬 환경 확인용
 import google.generativeai as genai
 from api_setup import get_secrets, get_groq_models, get_gemini_models, get_notion_databases
 from discord_bot import report_to_discord
 from agent import LobsterAgent
-import database # 📌 신규: 우체통(DB) 연결!
+import database 
 
 st.set_page_config(page_title="Lobster Chat Center", page_icon="🦞", layout="wide")
 
-# 📌 앱 시작 시 DB가 없으면 뼈대를 만듭니다.
 database.init_db()
-
 secrets = get_secrets()
 groq_models = get_groq_models(secrets["GROQ"])
 gemini_models = get_gemini_models(secrets["GEMINI"])
@@ -24,6 +24,19 @@ AVAILABLE_TOOLS = [
 ]
 
 ROSTER_FILE = "agents_roster.json"
+PID_FILE = "worker.pid" # 📌 워커 엔진 생사 확인용 파일
+
+# 📌 워커 엔진 상태 체크 함수
+def get_worker_pid():
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE, "r") as f:
+                pid = int(f.read())
+            os.kill(pid, 0) # 프로세스가 살아있는지 찔러봄
+            return pid
+        except:
+            os.remove(PID_FILE) # 죽었으면 찌꺼기 파일 삭제
+    return None
 
 def load_roster():
     if os.path.exists(ROSTER_FILE):
@@ -116,7 +129,7 @@ tab3_name = t("🏢 장기 프로젝트 사령부 (오픈클로 모드)", "🏢 
 tab1, tab2, tab3 = st.tabs([tab1_name, tab2_name, tab3_name])
 
 # ------------------------------------------
-# [탭 1] 1:1 개인 업무 지시 (DM) - 기존 유지
+# [탭 1] 1:1 개인 업무 지시 (DM)
 # ------------------------------------------
 with tab1:
     contact_col, chat_col = st.columns([1, 3])
@@ -165,7 +178,7 @@ with tab1:
                 st.session_state[chat_memory_key].append({"role": "assistant", "content": final_memory})
 
 # ------------------------------------------
-# [탭 2] 🔥 원탁 회의실 (끝장 토론) - 기존 유지
+# [탭 2] 🔥 원탁 회의실 (끝장 토론)
 # ------------------------------------------
 with tab2:
     st.subheader(t("토론 참석자 세팅", "Select Attendees"))
@@ -300,10 +313,46 @@ with tab2:
         with st.container(border=True):
             st.markdown(st.session_state.final_report)
 
+
 # ------------------------------------------
 # [탭 3] 🏢 장기 프로젝트 사령부 (오픈클로 모드 CCTV)
 # ------------------------------------------
 with tab3:
+    # 📌 1. 서버 엔진 컨트롤 패널 (새로 생긴 마법의 버튼!)
+    st.subheader(t("⚙️ 지하실 워커(Worker) 엔진 컨트롤", "⚙️ Background Worker Engine Control"))
+    
+    current_pid = get_worker_pid()
+    
+    col_status, col_btn = st.columns([3, 1])
+    with col_status:
+        if current_pid:
+            st.success(t(f"🟢 워커 엔진이 백그라운드에서 가동 중입니다. (PID: {current_pid})", f"🟢 Worker engine is running. (PID: {current_pid})"))
+            st.caption(t("사령관님이 웹 브라우저를 닫아도 워커는 알아서 24시간 일합니다!", "Worker will keep running 24/7 even if you close the browser!"))
+        else:
+            st.error(t("🔴 워커 엔진이 꺼져 있습니다. 프로젝트를 자동 실행하려면 엔진을 먼저 켜주세요.", "🔴 Worker engine is OFF. Start the engine to run projects."))
+            
+    with col_btn:
+        if current_pid:
+            if st.button(t("⏹️ 워커 정지", "⏹️ Stop Worker"), use_container_width=True):
+                try:
+                    import signal
+                    os.kill(current_pid, signal.SIGTERM) # 윈도우/맥/리눅스 모두 호환
+                    os.remove(PID_FILE)
+                except Exception as e:
+                    st.warning(f"종료 실패 (이미 꺼져있을 수 있습니다): {e}")
+                    if os.path.exists(PID_FILE): os.remove(PID_FILE)
+                st.rerun()
+        else:
+            if st.button(t("▶️ 워커 가동", "▶️ Start Worker"), type="primary", use_container_width=True):
+                # 백그라운드 프로세스 몰래 실행
+                p = subprocess.Popen([sys.executable, "worker.py"])
+                with open(PID_FILE, "w") as f:
+                    f.write(str(p.pid))
+                st.rerun()
+
+    st.divider()
+
+    # 📌 2. 장기 프로젝트 하달 구역
     st.subheader(t("👑 장기 프로젝트 백그라운드 지시", "👑 Assign Background Project"))
     
     col_l, col_w = st.columns(2)
@@ -314,20 +363,20 @@ with tab3:
     
     grand_goal = st.text_area(t("🚀 장기 프로젝트 마스터 플랜 (사령관의 목표)", "🚀 Grand Project Goal"), height=100)
     
-    # 📌 여기서 스트림릿이 직접 돌지 않고 DB에 쏴버립니다!
-    if st.button(t("⚙️ 지하실 워커(Worker)에게 명령 하달!", "⚙️ Dispatch Order to Worker!"), use_container_width=True, type="primary"):
-        if not worker_keys: st.warning(t("실무 요원이 최소 1명 필요합니다!", "Need at least 1 worker!"))
+    if st.button(t("📥 우체통에 명령서 넣기 (DB 저장)", "📥 Dispatch Order to Worker!"), use_container_width=True):
+        if not current_pid: st.warning(t("⚠️ 위에 있는 엔진 전원을 먼저 켜주세요!", "⚠️ Turn on the engine above first!"))
+        elif not worker_keys: st.warning(t("실무 요원이 최소 1명 필요합니다!", "Need at least 1 worker!"))
         elif not grand_goal: st.warning(t("프로젝트 목표를 입력하세요!", "Enter project goal!"))
         else:
             database.create_job(leader_key, worker_keys, grand_goal)
-            st.success(t("✅ 명령이 DB에 저장되었습니다! 이제 랩탑을 끄셔도 지하실 워커가 알아서 일합니다.", "✅ Job saved! You can close your laptop now."))
+            st.success(t("✅ 명령이 우체통(DB)에 저장되었습니다! 워커가 곧 낚아채서 실행합니다.", "✅ Job saved in DB! Worker will pick it up soon."))
             st.balloons()
             time.sleep(1.5)
             st.rerun()
 
     st.divider()
 
-    # 📌 CCTV (데이터베이스 현황판)
+    # 📌 3. 실시간 CCTV 모니터링 구역
     col_dash, col_ref = st.columns([4, 1])
     with col_dash:
         st.subheader(t("📡 지하실 작업 현황판 (CCTV)", "📡 Underground Worker CCTV"))
@@ -343,7 +392,6 @@ with tab3:
             job_id, leader, workers_json, goal, status, logs, created_at = job
             workers = json.loads(workers_json)
             
-            # 상태별 색상 뱃지
             status_color = "🟢" if status == "COMPLETED" else "🟡" if status == "RUNNING" else "🔴" if status == "FAILED" else "⚪"
             
             with st.expander(f"{status_color} [Job #{job_id}] {goal[:30]}... ({status}) - {created_at}"):
@@ -351,6 +399,4 @@ with tab3:
                 st.write(f"**목표:** {goal}")
                 st.markdown("---")
                 st.markdown("**📜 실시간 작업 로그**")
-                
-                # 로그를 코드 블록처럼 예쁘게 보여줍니다.
                 st.code(logs, language="markdown")
