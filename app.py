@@ -19,14 +19,19 @@ gemini_models = get_gemini_models(secrets["GEMINI"])
 default_groq = groq_models[0] if groq_models else "llama3-8b-8192"
 
 AVAILABLE_TOOLS = [
+    # 🆓 100% 무료 무기 (무한 데이터 수집 & 가공)
     "🦆 무제한 웹검색 (무료)", 
     "🕷️ 웹페이지 읽기 (무료)", 
     "💾 로컬 파일 제어 (무료)", 
     "💻 파이썬 터미널 실행 (무료)",
+    
+    # 🔑 유료/API 무기 (고급 문서화 & 알림)
     "📝 Notion API", 
-    "💬 Slack API"
+    "💬 Slack API",
+    "🐙 GitHub API",
+    "📊 Google Sheets API",
+    "🎨 Pixabay API"
 ]
-
 ROSTER_FILE = "agents_roster.json"
 PID_FILE = "worker.pid" # 📌 워커 엔진 생사 확인용 파일
 
