@@ -6,8 +6,12 @@ import google.generativeai as genai
 from api_setup import get_secrets, get_groq_models, get_gemini_models, get_notion_databases
 from discord_bot import report_to_discord
 from agent import LobsterAgent
+import database # 📌 신규: 우체통(DB) 연결!
 
 st.set_page_config(page_title="Lobster Chat Center", page_icon="🦞", layout="wide")
+
+# 📌 앱 시작 시 DB가 없으면 뼈대를 만듭니다.
+database.init_db()
 
 secrets = get_secrets()
 groq_models = get_groq_models(secrets["GROQ"])
@@ -89,8 +93,6 @@ with st.sidebar:
             if notion_dbs:
                 selected_db_name = st.selectbox(t("📂 담당할 노션 DB 선택", "📂 Select Notion DB"), list(notion_dbs.keys()))
                 selected_notion_db_id = notion_dbs[selected_db_name]
-            else:
-                st.warning(t("⚠️ 노션 연결 안됨.", "⚠️ Notion not connected."))
         
         if st.button(t("채용 및 명부 등록 🚀", "Hire & Save 🚀")):
             if new_name and new_role:
@@ -106,15 +108,15 @@ with st.sidebar:
                 st.rerun()
 
 # ==========================================
-# 4. 메인 화면: 탭 분리 (탭 3 추가!)
+# 4. 메인 화면: 탭 분리
 # ==========================================
 tab1_name = t("💬 1:1 개인 업무 지시", "💬 1:1 Direct Messages")
 tab2_name = t("🔥 원탁 회의실", "🔥 War Room")
-tab3_name = t("🏢 장기 프로젝트 사령부", "🏢 Long-term Project HQ")
+tab3_name = t("🏢 장기 프로젝트 사령부 (오픈클로 모드)", "🏢 Long-term Project HQ (OpenClo Mode)")
 tab1, tab2, tab3 = st.tabs([tab1_name, tab2_name, tab3_name])
 
 # ------------------------------------------
-# [탭 1] 1:1 개인 업무 지시 (DM)
+# [탭 1] 1:1 개인 업무 지시 (DM) - 기존 유지
 # ------------------------------------------
 with tab1:
     contact_col, chat_col = st.columns([1, 3])
@@ -122,7 +124,6 @@ with tab1:
         st.subheader(t("👥 내 요원 목록", "👥 My Agents"))
         selected_agent_key = st.radio(t("업무 지시 요원 선택", "Select agent"), list(st.session_state.agent_roster.keys()), label_visibility="collapsed")
         active_lobster = st.session_state.agent_roster[selected_agent_key]
-        
         st.divider()
         st.caption(t(f"🧠 장착 뇌:\n`{active_lobster.model_groq}`", f"🧠 Brain:\n`{active_lobster.model_groq}`"))
         tools_str = ", ".join(active_lobster.tools) if hasattr(active_lobster, 'tools') and active_lobster.tools else t("맨손 (툴 없음)", "No Tools")
@@ -164,7 +165,7 @@ with tab1:
                 st.session_state[chat_memory_key].append({"role": "assistant", "content": final_memory})
 
 # ------------------------------------------
-# [탭 2] 🔥 원탁 회의실 (끝장 토론)
+# [탭 2] 🔥 원탁 회의실 (끝장 토론) - 기존 유지
 # ------------------------------------------
 with tab2:
     st.subheader(t("토론 참석자 세팅", "Select Attendees"))
@@ -300,10 +301,10 @@ with tab2:
             st.markdown(st.session_state.final_report)
 
 # ------------------------------------------
-# [탭 3] 🏢 장기 프로젝트 사령부 (자동화 대시보드)
+# [탭 3] 🏢 장기 프로젝트 사령부 (오픈클로 모드 CCTV)
 # ------------------------------------------
 with tab3:
-    st.subheader(t("👑 리더 임명 및 프로젝트 하달", "👑 Appoint Leader & Assign Project"))
+    st.subheader(t("👑 장기 프로젝트 백그라운드 지시", "👑 Assign Background Project"))
     
     col_l, col_w = st.columns(2)
     with col_l:
@@ -311,126 +312,45 @@ with tab3:
     with col_w:
         worker_keys = st.multiselect(t("👷 실무 요원 선택 (다중 선택)", "👷 Select Workers"), list(st.session_state.agent_roster.keys()), key="auto_workers")
     
-    grand_goal = st.text_area(t("🚀 장기 프로젝트 마스터 플랜 (사령관의 목표)", "🚀 Grand Project Goal (Commander's Objective)"), height=100)
+    grand_goal = st.text_area(t("🚀 장기 프로젝트 마스터 플랜 (사령관의 목표)", "🚀 Grand Project Goal"), height=100)
     
-    if "auto_running" not in st.session_state: st.session_state.auto_running = False
-    
-    col_btn1, col_btn2 = st.columns([3, 1])
-    with col_btn1:
-        if not st.session_state.auto_running:
-            if st.button(t("⚙️ 자율 프로젝트 가동!", "⚙️ Start Autonomous Project!"), use_container_width=True, type="primary"):
-                if not worker_keys: st.warning(t("실무 요원이 최소 1명 필요합니다!", "Need at least 1 worker!"))
-                elif not grand_goal: st.warning(t("프로젝트 목표를 입력하세요!", "Enter project goal!"))
-                else:
-                    st.session_state.auto_running = True
-                    st.session_state.grand_goal = grand_goal
-                    st.session_state.auto_step = "planning" # planning -> executing -> review
-                    st.session_state.task_list = []
-                    st.session_state.task_results = []
-                    st.rerun()
-    with col_btn2:
-        if st.session_state.auto_running:
-            if st.button(t("🛑 프로젝트 중단", "🛑 Stop Project"), use_container_width=True):
-                st.session_state.auto_running = False
-                st.rerun()
+    # 📌 여기서 스트림릿이 직접 돌지 않고 DB에 쏴버립니다!
+    if st.button(t("⚙️ 지하실 워커(Worker)에게 명령 하달!", "⚙️ Dispatch Order to Worker!"), use_container_width=True, type="primary"):
+        if not worker_keys: st.warning(t("실무 요원이 최소 1명 필요합니다!", "Need at least 1 worker!"))
+        elif not grand_goal: st.warning(t("프로젝트 목표를 입력하세요!", "Enter project goal!"))
+        else:
+            database.create_job(leader_key, worker_keys, grand_goal)
+            st.success(t("✅ 명령이 DB에 저장되었습니다! 이제 랩탑을 끄셔도 지하실 워커가 알아서 일합니다.", "✅ Job saved! You can close your laptop now."))
+            st.balloons()
+            time.sleep(1.5)
+            st.rerun()
 
     st.divider()
 
-    # 📌 대시보드 UI (현재 진행 상황 모니터링)
-    if st.session_state.auto_running or "task_list" in st.session_state:
-        st.subheader(t("📡 실시간 관제 대시보드", "📡 Live Operations Dashboard"))
-        leader_agent = st.session_state.agent_roster[leader_key]
-        
-        # [Step 1] 리더의 업무 분배 단계
-        if st.session_state.auto_step == "planning":
-            with st.chat_message("assistant"):
-                with st.spinner(t(f"👑 리더 {leader_agent.name}가 프로젝트를 쪼개어 실무자들에게 할당 중입니다...", f"👑 Leader {leader_agent.name} is planning...")):
-                    workers_info = "\n".join([f"- {st.session_state.agent_roster[k].name} ({st.session_state.agent_roster[k].role})" for k in worker_keys])
-                    plan_prompt = f"""
-                    사령관의 장기 프로젝트 목표: {st.session_state.grand_goal}
-                    당신은 이 프로젝트의 총괄 리더다. 다음 실무자들의 직무를 파악하고, 각자 해야 할 구체적인 업무(Task)를 '{app_lang}'로 지시해라.
-                    [실무자 명단]:
-                    {workers_info}
-                    
-                    결과는 반드시 아래 양식으로만 내뱉어라 (다른 말 금지):
-                    [작업자이름1] | [해야할 업무 구체적 지시]
-                    [작업자이름2] | [해야할 업무 구체적 지시]
-                    """
-                    try:
-                        res = leader_agent.groq_client.chat.completions.create(
-                            messages=[{"role": "user", "content": plan_prompt}],
-                            model=leader_agent.model_groq, temperature=0.3
-                        )
-                        raw_tasks = res.choices[0].message.content.split('\n')
-                        
-                        st.session_state.task_list = [t for t in raw_tasks if "|" in t]
-                        st.session_state.auto_step = "executing"
-                        st.session_state.current_task_idx = 0
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Planning Error: {e}")
-                        st.session_state.auto_running = False
-                        
-        # [Step 2] 실무 요원들의 릴레이 업무 실행 단계
-        elif st.session_state.auto_step == "executing":
-            st.info(t("📋 리더가 하달한 작업 목록", "📋 Task List Assigned by Leader"))
-            for t_item in st.session_state.task_list:
-                st.markdown(f"- {t_item}")
-            
-            st.divider()
-            idx = st.session_state.current_task_idx
-            
-            if idx < len(st.session_state.task_list):
-                current_task = st.session_state.task_list[idx]
-                worker_name = current_task.split("|")[0].strip()
-                task_detail = current_task.split("|")[1].strip()
-                
-                worker_agent = None
-                for k in worker_keys:
-                    if st.session_state.agent_roster[k].name in worker_name:
-                        worker_agent = st.session_state.agent_roster[k]
-                        break
-                
-                if worker_agent:
-                    with st.chat_message("assistant"):
-                        with st.spinner(t(f"👷 {worker_agent.name} 요원이 업무를 실행 중입니다 (쿨타임 20초 대기 중)...", f"👷 {worker_agent.name} executing... (20s cooldown)")):
-                            time.sleep(20) # 📌 Groq 429 에러 방어용 쿨타임!
-                            try:
-                                action, reply, _ = worker_agent.think_and_act(
-                                    f"리더의 지시: {task_detail}\n[명령] 반드시 [TASK] 태그를 달고, 툴을 활용해서 완벽하게 결과물을 내라.", []
-                                )
-                                st.markdown(f"**[{worker_agent.name}의 실행 결과]**\n{reply}")
-                                st.session_state.task_results.append(f"[{worker_agent.name} 결과]\n{reply}")
-                                st.session_state.current_task_idx += 1
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Execution Error: {e}")
-                                st.session_state.auto_running = False
-                else:
-                    st.session_state.current_task_idx += 1
-                    st.rerun()
-                    
-            else:
-                st.session_state.auto_step = "review"
-                st.rerun()
+    # 📌 CCTV (데이터베이스 현황판)
+    col_dash, col_ref = st.columns([4, 1])
+    with col_dash:
+        st.subheader(t("📡 지하실 작업 현황판 (CCTV)", "📡 Underground Worker CCTV"))
+    with col_ref:
+        if st.button("🔄 새로고침 (Refresh)", use_container_width=True):
+            st.rerun()
 
-        # [Step 3] 리더의 최종 취합 및 리뷰
-        elif st.session_state.auto_step == "review":
-            with st.chat_message("assistant"):
-                with st.spinner(t(f"👑 리더 {leader_agent.name}가 요원들의 결과물을 취합하고 보고서를 작성 중입니다...", f"👑 Leader {leader_agent.name} is reviewing...")):
-                    all_results = "\n\n".join(st.session_state.task_results)
-                    review_prompt = f"""
-                    사령관의 목표: {st.session_state.grand_goal}
-                    요원들의 실행 결과: {all_results}
-                    
-                    당신은 리더다. 위 결과들을 종합하여 사령관님께 보고할 최종 요약 보고서를 '{app_lang}'로 작성해라. 문서화 툴이 있다면 [TASK] 태그를 달아 노션에 업로드해라.
-                    """
-                    try:
-                        action, reply, _ = leader_agent.think_and_act(review_prompt, [])
-                        st.success(t("✅ 장기 프로젝트 완료! 리더의 최종 보고서:", "✅ Project Complete! Leader's Final Report:"))
-                        st.markdown(reply)
-                        report_to_discord(secrets["DISCORD"], "🚀 프로젝트 완료 보고", reply[:4000], 15158332)
-                        st.session_state.auto_running = False
-                    except Exception as e:
-                        st.error(f"Review Error: {e}")
-                        st.session_state.auto_running = False
+    jobs = database.get_all_jobs()
+    if not jobs:
+        st.info("현재 대기 중이거나 진행 중인 장기 프로젝트가 없습니다.")
+    else:
+        for job in jobs:
+            job_id, leader, workers_json, goal, status, logs, created_at = job
+            workers = json.loads(workers_json)
+            
+            # 상태별 색상 뱃지
+            status_color = "🟢" if status == "COMPLETED" else "🟡" if status == "RUNNING" else "🔴" if status == "FAILED" else "⚪"
+            
+            with st.expander(f"{status_color} [Job #{job_id}] {goal[:30]}... ({status}) - {created_at}"):
+                st.caption(f"**👑 리더:** {leader} | **👷 실무자:** {', '.join(workers)}")
+                st.write(f"**목표:** {goal}")
+                st.markdown("---")
+                st.markdown("**📜 실시간 작업 로그**")
+                
+                # 로그를 코드 블록처럼 예쁘게 보여줍니다.
+                st.code(logs, language="markdown")
