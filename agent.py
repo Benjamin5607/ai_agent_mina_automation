@@ -24,27 +24,23 @@ class LobsterAgent:
                 return res.choices[0].message.content.replace('"', '').strip()
             except: return ""
 
-        # 🆓 1. 무료 무제한 검색 (DuckDuckGo)
         if "🦆 무제한 웹검색 (무료)" in self.tools and ("검색" in execution_plan or "서치" in execution_plan):
             query = extract_keyword(f"Extract ONE english keyword for search from this: {execution_plan}")
             result = tools.use_duckduckgo_search(query)
             action_logs.append(result)
 
-        # 🆓 2. 무료 웹 스크래퍼 (BeautifulSoup)
         if "🕷️ 웹페이지 읽기 (무료)" in self.tools and ("크롤링" in execution_plan or "읽기" in execution_plan or "스크랩" in execution_plan):
             urls = re.findall(r'(https?://[^\s]+)', execution_plan + " " + actual_content)
             if urls:
                 result = tools.use_web_scraper(urls[0])
                 action_logs.append(result)
 
-        # 🆓 3. 파일 시스템 (저장)
         if "💾 로컬 파일 제어 (무료)" in self.tools and ("저장" in execution_plan or "파일" in execution_plan):
             filename = extract_keyword(f"Extract a valid filename with extension (e.g. report.md, data.csv) from this: {execution_plan}")
             if not filename or "." not in filename: filename = "output_report.md"
             result = tools.use_file_system("write", filename, actual_content)
             action_logs.append(result)
 
-        # 🆓 4. 파이썬 코드 실행기
         if "💻 파이썬 터미널 실행 (무료)" in self.tools and ("코드" in execution_plan or "실행" in execution_plan or "파이썬" in execution_plan):
             code_blocks = re.findall(r'```python\n(.*?)\n```', actual_content, re.DOTALL)
             code_to_run = code_blocks[0] if code_blocks else ""
@@ -54,7 +50,6 @@ class LobsterAgent:
             else:
                 action_logs.append("⚠️ 실행할 파이썬 코드를 찾지 못했습니다.")
 
-        # 🔑 기존 무기들
         if "📝 Notion API" in self.tools and ("노션" in execution_plan or "문서" in execution_plan):
             title = f"[{self.name}] 보고서"
             db_to_use = self.notion_db_id if self.notion_db_id else api_secrets.get("NOTION_DATABASE_ID", "")
@@ -70,7 +65,6 @@ class LobsterAgent:
     def think_and_act(self, user_message, chat_history):
         tools_list = ", ".join(self.tools) if self.tools else "없음(물리적 작업 절대 불가)"
         
-        # 📌 1차 JSON 검증 (자격 검증)
         eval_prompt = f"""
         너는 '{self.name}' (직무: {self.role})이다. 물리적 무기는 [{tools_list}] 뿐이다.
         지시: "{user_message}"
@@ -96,7 +90,6 @@ class LobsterAgent:
                 return "help", f"사령관님, 지원이 필요합니다.\n- 이유: {reason}\n- 필요 사항: {needs}", None
         except: pass
 
-        # 📌 실행 단계
         system_prompt = f"""
         너는 '{self.name}'이다. 네 무기는 [{tools_list}] 이다.
         무기를 쓸 때는 맨 앞에 [TASK] 태그를 달고 계획을 1줄로 적어라.
@@ -126,7 +119,7 @@ class LobsterAgent:
             result_text = exec_completion.choices[0].message.content
             
             if "http://" in result_text or "https://" in result_text or ".com" in result_text:
-                 return "help", f"[NEED_HELP] 사령관님, 해당 작업을 완료하려면 외부 계정 연동이나 권한이 필요합니다.", None
+                return "help", f"[NEED_HELP] 사령관님, 해당 작업을 완료하려면 외부 계정 연동이나 권한이 필요합니다.", None
 
             tool_results = self.execute_tools(plan, result_text, st.secrets)
             return "task", plan, f"{result_text}\n\n---\n**[🛠️ 무기 실제 실행 로그]**\n{tool_results}"
