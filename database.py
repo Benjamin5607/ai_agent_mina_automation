@@ -49,3 +49,11 @@ def provide_feedback(job_id, feedback):
         c.execute("UPDATE jobs SET grand_goal=?, logs=?, status=? WHERE id=?", (new_goal, new_logs, "PENDING", job_id))
     conn.commit()
     conn.close()
+
+def delete_job(job_id):
+    """사령관의 권한으로 프로젝트를 영구 삭제합니다."""
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("DELETE FROM jobs WHERE id=?", (job_id,))
+    conn.commit()
+    conn.close()
