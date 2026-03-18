@@ -50,10 +50,42 @@ class LobsterAgent:
             else:
                 action_logs.append("⚠️ 실행할 파이썬 코드를 찾지 못했습니다.")
 
-        if "🎬 숏폼 영상 제작기 (무료)" in self.tools and ("영상" in execution_plan or "쇼츠" in execution_plan or "릴스" in execution_plan):
-            script = extract_keyword(f"Extract the Korean spoken voice script for the video from this: {actual_content}")
+        if "🎬 숏폼 영상 제작기 (무료)" in self.tools and ("영상" in execution_plan or "쇼츠" in execution_plan):
+            # 1. AI 렌더링에 쓸 영문 이미지 프롬프트 추출 (기존 로직 유지)
             prompt = extract_keyword(f"Extract a short english image prompt from this: {actual_content}. Make sure it includes 'Emily, 3D Pixar style character'.")
-            result = tools.use_video_generator(script, prompt)
+
+            # 2. 🌟 [신규] LLM을 사용하여 상황 묘사(actual_content) 기반 전문 쇼츠 대본 자동 생성!
+            st.caption("✍️ 랍스타 군단이 전문 쇼츠 대본을 작성하는 중입니다...")
+            
+            # 전문 쇼츠 작가 프롬프트
+            script_writer_prompt = f"""
+            너는 100만 유튜버의 전문 쇼츠 대본 작가다.
+            아래 [상황 묘사]를 바탕으로 시청자를 끄는 매력적인 한국어 음성 합성(TTS) 대본을 작성해라.
+            - 길이: 30초 내외 (2~3문장)
+            - 톤앤매너: 발랄하고, 친근하고, 흥미진진하게 (에밀리 캐릭터에 맞게)
+            - [주의] 오직 성우가 읽을 '말하기(Spoken)' 텍스트만 출력해라. 상황 묘사나 지시문은 절대 섞지 마라.
+            - 결과물 언어: 한국어
+            
+            [사령관 지시]: {execution_plan}
+            [상황 묘사]: {actual_content}
+            전문 대본:
+            """
+            try:
+                # 대본 작가 전용 LLM 사격! (8B 모델도 이 정도는 잘합니다 ㅋㅋ)
+                script_completion = self.groq_client.chat.completions.create(
+                    messages=[{"role": "user", "content": script_writer_prompt}],
+                    model="llama3-8b-8192", temperature=0.7 # 약간의 창의력 주입
+                )
+                generated_script = script_completion.choices[0].message.content.strip()
+            except:
+                # LLM 작성이 실패했을 때만 최후의 fallback 사용
+                generated_script = f"안녕하세요! 에밀리의 {execution_plan} 영상입니다. 함께 감상해 보시죠!"
+
+            # 3. 렌더링 로그에 자동 생성된 대본 표시 (CCTV용)
+            action_logs.append(f"✍️ [쇼츠 작가 자동 대본 생성]: {generated_script}")
+            
+            # 4. 이제 완벽한 대본과 프롬프트를 들고 진짜 툴을 격발!
+            result = tools.use_video_generator(generated_script, prompt)
             action_logs.append(result)
 
         if "🚀 SNS 자동 업로드 (웹훅)" in self.tools and ("업로드" in execution_plan or "틱톡" in execution_plan or "인스타" in execution_plan or "유튜브" in execution_plan):
