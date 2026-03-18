@@ -4,5 +4,5 @@ google-generativeai
 requests
 beautifulsoup4
 duckduckgo-search
-moviepy
+moviepy==1.0.3
 gTTS
