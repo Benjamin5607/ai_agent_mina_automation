@@ -13,7 +13,7 @@ class LobsterAgent:
         self.notion_db_id = None
         self.model_groq = "llama3-8b-8192"
 
-    def execute_tools(self, execution_plan, actual_content, api_secrets):
+    def execute_tools(self, execution_plan, actual_content, api_secrets, user_message=""):
         action_logs = []
         def extract_keyword(prompt_text):
             try:
