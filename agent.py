@@ -49,19 +49,16 @@ class LobsterAgent:
                 action_logs.append(result)
             else:
                 action_logs.append("⚠️ 실행할 파이썬 코드를 찾지 못했습니다.")
-        # 🎬 5. 무료 숏폼 영상 제작기
+
         if "🎬 숏폼 영상 제작기 (무료)" in self.tools and ("영상" in execution_plan or "쇼츠" in execution_plan or "릴스" in execution_plan):
             script = extract_keyword(f"Extract the Korean spoken voice script for the video from this: {actual_content}")
-            # Emily 프롬프트 강제 주입
             prompt = extract_keyword(f"Extract a short english image prompt from this: {actual_content}. Make sure it includes 'Emily, 3D Pixar style character'.")
             result = tools.use_video_generator(script, prompt)
             action_logs.append(result)
 
-        # 🚀 6. SNS 웹훅 발사기
         if "🚀 SNS 자동 업로드 (웹훅)" in self.tools and ("업로드" in execution_plan or "틱톡" in execution_plan or "인스타" in execution_plan or "유튜브" in execution_plan):
             title = extract_keyword(f"Extract the video title from this: {actual_content}")
             tags = extract_keyword(f"Extract the hashtags from this: {actual_content}")
-            # webhook_url은 Make.com에서 발급받은 URL을 시크릿에 넣거나 하드코딩합니다.
             webhook_url = api_secrets.get("MAKE_WEBHOOK_URL", "")
             result = tools.use_sns_webhook(title, tags, webhook_url)
             action_logs.append(result)
@@ -79,13 +76,33 @@ class LobsterAgent:
         return "\n\n".join(action_logs) if action_logs else "⚠️ 툴 조건에 맞지 않아 실행하지 않았습니다."
 
     def think_and_act(self, user_message, chat_history):
-        tools_list = ", ".join(self.tools) if self.tools else "없음(물리적 작업 절대 불가)"
+        # 📌 신규: 무기 사용 설명서 (메뉴얼) 주입!
+        tool_desc = {
+            "🦆 무제한 웹검색 (무료)": "인터넷 검색 엔진을 통해 맛집 추천, 뉴스, 최신 트렌드 등 모든 웹 정보를 찾아옵니다.",
+            "🕷️ 웹페이지 읽기 (무료)": "특정 URL의 본문 텍스트를 모두 긁어옵니다.",
+            "💾 로컬 파일 제어 (무료)": "결과물을 마크다운(.md)이나 CSV 파일 등으로 저장합니다.",
+            "💻 파이썬 터미널 실행 (무료)": "데이터 분석 등 복잡한 계산을 위해 파이썬 코드를 실행합니다.",
+            "🎬 숏폼 영상 제작기 (무료)": "대본 작성, 3D 픽사 스타일 AI 이미지 생성, TTS 음성 합성을 모두 포함하여 하나의 mp4 영상을 렌더링합니다.",
+            "🚀 SNS 자동 업로드 (웹훅)": "완성된 영상을 틱톡, 인스타, 유튜브 등에 자동으로 전송하고 업로드합니다.",
+            "📝 Notion API": "노션 데이터베이스에 보고서를 작성합니다.",
+            "💬 Slack API": "슬랙으로 알림 메시지를 전송합니다."
+        }
         
+        if not self.tools:
+            manual = "없음 (물리적 작업 절대 불가)"
+        else:
+            manual = "\n".join([f"- {t}: {tool_desc.get(t, '')}" for t in self.tools])
+        
+        # 1차 JSON 검증
         eval_prompt = f"""
-        너는 '{self.name}' (직무: {self.role})이다. 물리적 무기는 [{tools_list}] 뿐이다.
+        너는 '{self.name}' (직무: {self.role})이다.
+        네가 가진 무기와 그 기능은 다음과 같다:
+        {manual}
+
         지시: "{user_message}"
-        네가 가진 무기({tools_list})만으로 이 지시를 '실제로' 완벽하게 수행할 수 있는가?
-        (만약 무기 목록에 없는 권한/기능이 필요하다면 무조건 할 수 없다고 판단해라)
+        
+        네가 가진 무기만으로 이 지시를 '실제로' 완벽하게 수행할 수 있는가?
+        (예: 맛집 검색은 '웹검색'으로 가능, 3D 픽사 이미지는 '영상 제작기'로 가능함을 인지할 것)
         
         아래 JSON 형식으로만 대답해라.
         {{
@@ -106,10 +123,11 @@ class LobsterAgent:
                 return "help", f"사령관님, 지원이 필요합니다.\n- 이유: {reason}\n- 필요 사항: {needs}", None
         except: pass
 
+        # 실행 단계
         system_prompt = f"""
-        너는 '{self.name}'이다. 네 무기는 [{tools_list}] 이다.
+        너는 '{self.name}'이다. 네 무기 메뉴얼은 다음과 같다:
+        {manual}
         무기를 쓸 때는 맨 앞에 [TASK] 태그를 달고 계획을 1줄로 적어라.
-        특히 '💻 파이썬 터미널 실행 (무료)' 무기가 있다면, 복잡한 계산이나 데이터 처리를 위해 ```python ... ``` 블록으로 코드를 작성해라. (내가 그 코드를 직접 실행해줄 것이다)
         """
         messages = [{"role": "system", "content": system_prompt}] + chat_history
         messages.append({"role": "user", "content": user_message})
