@@ -413,14 +413,7 @@ with tab3:
 
     st.divider()
 
-    # 📌 3. 실시간 CCTV 모니터링 구역 (HITL 피드백 주입 포함)
-    col_dash, col_ref = st.columns([4, 1])
-    with col_dash:
-        st.subheader(t("📡 지하실 작업 현황판 (CCTV)", "📡 Underground Worker CCTV"))
-    with col_ref:
-        if st.button("🔄 새로고침 (Refresh)", use_container_width=True):
-            st.rerun()
-
+    # 📌 3. 실시간 CCTV 모니터링 구역 (탭 3번 하단)
     jobs = database.get_all_jobs()
     if not jobs:
         st.info("현재 대기 중이거나 진행 중인 장기 프로젝트가 없습니다.")
@@ -434,14 +427,21 @@ with tab3:
             with st.expander(f"{status_color} [Job #{job_id}] {goal[:30]}... ({status}) - {created_at}", expanded=(status=="PAUSED")):
                 st.caption(f"**👑 리더:** {leader} | **👷 실무자:** {', '.join(workers)}")
                 st.write(f"**목표:** {goal}")
+                
+                # 📌 프로젝트 강제 삭제 버튼 추가!
+                if st.button("🗑️ 이 프로젝트 기록 영구 삭제", key=f"del_job_{job_id}", type="secondary"):
+                    database.delete_job(job_id)
+                    st.success(f"✅ Job #{job_id} 삭제 완료!")
+                    time.sleep(1)
+                    st.rerun()
+
                 st.markdown("---")
                 st.markdown("**📜 실시간 작업 로그**")
                 st.code(logs, language="markdown")
                 
-                # 📌 신규: 작업이 일시 정지(PAUSED) 되었을 때 나타나는 구명조끼 UI
                 if status == "PAUSED":
                     st.error("🚨 에이전트가 사령관님의 도움을 요청했습니다! (위 로그의 SOS 메시지를 확인하세요)")
-                    feedback = st.text_input("사령관의 지시 및 정보 제공 (예: '이메일 주소는 abc@gmail.com이야', '해당 작업은 빼고 진행해')", key=f"fb_{job_id}")
+                    feedback = st.text_input("사령관의 지시 및 정보 제공", key=f"fb_{job_id}")
                     if st.button("▶️ 피드백 전송 및 작업 재개", key=f"btn_{job_id}", type="primary", use_container_width=True):
                         if feedback:
                             database.provide_feedback(job_id, feedback)
