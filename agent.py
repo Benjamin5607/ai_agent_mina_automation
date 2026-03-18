@@ -30,7 +30,7 @@ class LobsterAgent:
             action_logs.append(result)
 
         if "🕷️ 웹페이지 읽기 (무료)" in self.tools and ("크롤링" in execution_plan or "읽기" in execution_plan or "스크랩" in execution_plan):
-            urls = re.findall(r'(https?://[^\s]+)', execution_plan + " " + actual_content)
+            urls = re.findall(r'(https?://[^\s]+)', user_message + " " + execution_plan + " " + actual_content)
             if urls:
                 result = tools.use_web_scraper(urls[0])
                 action_logs.append(result)
@@ -149,7 +149,7 @@ class LobsterAgent:
             
             # 📌 여기도 URL 차단 코드 삭제 완료!
 
-            tool_results = self.execute_tools(plan, result_text, st.secrets)
+            tool_results = self.execute_tools(plan, result_text, st.secrets, user_message)
             return "task", plan, f"{result_text}\n\n---\n**[🛠️ 무기 실제 실행 로그]**\n{tool_results}"
             
         else:
