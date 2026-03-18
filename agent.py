@@ -49,6 +49,22 @@ class LobsterAgent:
                 action_logs.append(result)
             else:
                 action_logs.append("⚠️ 실행할 파이썬 코드를 찾지 못했습니다.")
+        # 🎬 5. 무료 숏폼 영상 제작기
+        if "🎬 숏폼 영상 제작기 (무료)" in self.tools and ("영상" in execution_plan or "쇼츠" in execution_plan or "릴스" in execution_plan):
+            script = extract_keyword(f"Extract the Korean spoken voice script for the video from this: {actual_content}")
+            # Emily 프롬프트 강제 주입
+            prompt = extract_keyword(f"Extract a short english image prompt from this: {actual_content}. Make sure it includes 'Emily, 3D Pixar style character'.")
+            result = tools.use_video_generator(script, prompt)
+            action_logs.append(result)
+
+        # 🚀 6. SNS 웹훅 발사기
+        if "🚀 SNS 자동 업로드 (웹훅)" in self.tools and ("업로드" in execution_plan or "틱톡" in execution_plan or "인스타" in execution_plan or "유튜브" in execution_plan):
+            title = extract_keyword(f"Extract the video title from this: {actual_content}")
+            tags = extract_keyword(f"Extract the hashtags from this: {actual_content}")
+            # webhook_url은 Make.com에서 발급받은 URL을 시크릿에 넣거나 하드코딩합니다.
+            webhook_url = api_secrets.get("MAKE_WEBHOOK_URL", "")
+            result = tools.use_sns_webhook(title, tags, webhook_url)
+            action_logs.append(result)
 
         if "📝 Notion API" in self.tools and ("노션" in execution_plan or "문서" in execution_plan):
             title = f"[{self.name}] 보고서"
