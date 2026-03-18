@@ -131,6 +131,28 @@ with st.sidebar:
                 time.sleep(1)
                 st.rerun()
 
+    st.divider()
+    st.header(t("📥 서버 저장소 (다운로드)", "📥 Server Storage"))
+    st.caption("요원들이 생성한 파일을 다운로드합니다.")
+    
+    # 시스템 파일(.py, .db 등)은 숨기고, 결과물 파일만 보여주는 로직
+    ignore_exts = ('.py', '.db', '.pid', '.json', '.pyc')
+    try:
+        saved_files = [f for f in os.listdir(".") if os.path.isfile(f) and not f.endswith(ignore_exts)]
+        if saved_files:
+            for f_name in saved_files:
+                with open(f_name, "rb") as file_data:
+                    st.download_button(
+                        label=f"💾 {f_name}", 
+                        data=file_data, 
+                        file_name=f_name, 
+                        use_container_width=True
+                    )
+        else:
+            st.info("아직 생성된 파일이 없습니다.")
+    except Exception as e:
+        st.error(f"폴더 읽기 에러: {e}")
+
 # ==========================================
 # 4. 메인 화면: 탭 분리
 # ==========================================
