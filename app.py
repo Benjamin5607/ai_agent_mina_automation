@@ -132,22 +132,29 @@ with st.sidebar:
                 st.rerun()
 
     st.divider()
-    st.header(t("📥 서버 저장소 (다운로드)", "📥 Server Storage"))
-    st.caption("요원들이 생성한 파일을 다운로드합니다.")
+    st.header(t("📥 서버 저장소", "📥 Server Storage"))
+    st.caption("요원들이 생성한 파일을 다운로드하거나 삭제합니다.")
     
-    # 시스템 파일(.py, .db 등)은 숨기고, 결과물 파일만 보여주는 로직
     ignore_exts = ('.py', '.db', '.pid', '.json', '.pyc')
     try:
         saved_files = [f for f in os.listdir(".") if os.path.isfile(f) and not f.endswith(ignore_exts)]
         if saved_files:
             for f_name in saved_files:
-                with open(f_name, "rb") as file_data:
-                    st.download_button(
-                        label=f"💾 {f_name}", 
-                        data=file_data, 
-                        file_name=f_name, 
-                        use_container_width=True
-                    )
+                col_dl, col_del = st.columns([4, 1])
+                with col_dl:
+                    with open(f_name, "rb") as file_data:
+                        st.download_button(
+                            label=f"💾 {f_name}", 
+                            data=file_data, 
+                            file_name=f_name, 
+                            use_container_width=True,
+                            key=f"dl_{f_name}"
+                        )
+                with col_del:
+                    # 📌 파일 삭제 버튼!
+                    if st.button("🗑️", key=f"del_{f_name}", help="파일 영구 삭제"):
+                        os.remove(f_name)
+                        st.rerun()
         else:
             st.info("아직 생성된 파일이 없습니다.")
     except Exception as e:
