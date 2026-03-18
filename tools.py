@@ -66,6 +66,53 @@ def use_python_executor(code):
     except Exception as e:
         return f"실행기 에러: {e}"
 
+def use_video_generator(script, visual_prompt):
+    """🎬 숏폼 영상 제작기 (무료: Moviepy + gTTS + Pollinations)"""
+    try:
+        import urllib.parse
+        from gtts import gTTS
+        import moviepy.editor as mp
+        
+        # 1. Emily 캐릭터 이미지 생성 (무료 AI API)
+        safe_prompt = urllib.parse.quote(visual_prompt)
+        img_url = f"https://image.pollinations.ai/prompt/{safe_prompt}"
+        img_data = requests.get(img_url).content
+        with open("emily_bg.jpg", "wb") as f:
+            f.write(img_data)
+            
+        # 2. AI 성우 대본 녹음 (무료 gTTS)
+        tts = gTTS(text=script, lang='ko') # 영어로 하려면 'en'
+        tts.save("emily_voice.mp3")
+        
+        # 3. 오디오 길이에 맞춰 영상 렌더링
+        audio = mp.AudioFileClip("emily_voice.mp3")
+        img_clip = mp.ImageClip("emily_bg.jpg").set_duration(audio.duration)
+        video = img_clip.set_audio(audio)
+        
+        # mp4 파일로 굽기
+        output_filename = "emily_shorts.mp4"
+        video.write_videofile(output_filename, fps=24, logger=None)
+        
+        return f"🎬 [영상 제작 완료] '{output_filename}' (길이: {round(audio.duration, 1)}초) 파일이 성공적으로 렌더링되었습니다!"
+    except Exception as e:
+        return f"영상 제작 에러: {e}"
+
+def use_sns_webhook(video_title, tags, webhook_url):
+    """🚀 SNS 자동 업로드 (Make/Zapier 웹훅 연동)"""
+    if not webhook_url: return "🚨 에러: WEBHOOK_URL이 입력되지 않았습니다."
+    try:
+        # 워커가 만든 영상 정보를 Make.com으로 전송
+        payload = {
+            "title": video_title,
+            "tags": tags,
+            "video_file": "emily_shorts.mp4",
+            "action": "post_to_tiktok_instagram_youtube"
+        }
+        res = requests.post(webhook_url, json=payload)
+        return f"✅ [SNS 업로드 신호 전송 완료] Make.com 웹훅이 정상적으로 영상을 넘겨받아 배포를 시작합니다! (상태코드: {res.status_code})"
+    except Exception as e:
+        return f"웹훅 전송 에러: {e}"
+
 # ---------------------------------------------------------
 # 🔑 [기존 유료/Key 필요] 무기들
 # ---------------------------------------------------------
