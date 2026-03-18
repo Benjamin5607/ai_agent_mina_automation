@@ -76,15 +76,14 @@ class LobsterAgent:
         return "\n\n".join(action_logs) if action_logs else "⚠️ 툴 조건에 맞지 않아 실행하지 않았습니다."
 
     def think_and_act(self, user_message, chat_history):
-        # 📌 신규: 무기 사용 설명서 (메뉴얼) 주입!
         tool_desc = {
-            "🦆 무제한 웹검색 (무료)": "인터넷 검색 엔진을 통해 맛집 추천, 뉴스, 최신 트렌드 등 모든 웹 정보를 찾아옵니다.",
-            "🕷️ 웹페이지 읽기 (무료)": "특정 URL의 본문 텍스트를 모두 긁어옵니다.",
-            "💾 로컬 파일 제어 (무료)": "결과물을 마크다운(.md)이나 CSV 파일 등으로 저장합니다.",
-            "💻 파이썬 터미널 실행 (무료)": "데이터 분석 등 복잡한 계산을 위해 파이썬 코드를 실행합니다.",
-            "🎬 숏폼 영상 제작기 (무료)": "대본 작성, 3D 픽사 스타일 AI 이미지 생성, TTS 음성 합성을 모두 포함하여 하나의 mp4 영상을 렌더링합니다.",
-            "🚀 SNS 자동 업로드 (웹훅)": "완성된 영상을 틱톡, 인스타, 유튜브 등에 자동으로 전송하고 업로드합니다.",
-            "📝 Notion API": "노션 데이터베이스에 보고서를 작성합니다.",
+            "🦆 무제한 웹검색 (무료)": "인터넷 검색을 통해 웹 정보를 찾아옵니다.",
+            "🕷️ 웹페이지 읽기 (무료)": "특정 URL의 본문 텍스트를 긁어옵니다.",
+            "💾 로컬 파일 제어 (무료)": "결과물을 파일로 저장합니다.",
+            "💻 파이썬 터미널 실행 (무료)": "파이썬 코드를 실행합니다.",
+            "🎬 숏폼 영상 제작기 (무료)": "영상 렌더링을 수행합니다.",
+            "🚀 SNS 자동 업로드 (웹훅)": "완성된 영상을 업로드합니다.",
+            "📝 Notion API": "노션에 보고서를 작성합니다.",
             "💬 Slack API": "슬랙으로 알림 메시지를 전송합니다."
         }
         
@@ -102,8 +101,6 @@ class LobsterAgent:
         지시: "{user_message}"
         
         네가 가진 무기만으로 이 지시를 '실제로' 완벽하게 수행할 수 있는가?
-        (예: 맛집 검색은 '웹검색'으로 가능, 3D 픽사 이미지는 '영상 제작기'로 가능함을 인지할 것)
-        
         아래 JSON 형식으로만 대답해라.
         {{
             "can_execute": true 또는 false,
@@ -123,7 +120,6 @@ class LobsterAgent:
                 return "help", f"사령관님, 지원이 필요합니다.\n- 이유: {reason}\n- 필요 사항: {needs}", None
         except: pass
 
-        # 실행 단계
         system_prompt = f"""
         너는 '{self.name}'이다. 네 무기 메뉴얼은 다음과 같다:
         {manual}
@@ -137,8 +133,7 @@ class LobsterAgent:
         )
         response = chat_completion.choices[0].message.content
 
-        if "http://" in response or "https://" in response or ".com" in response:
-            return "help", f"[NEED_HELP] 사령관님, 외부 링크 접속/계정 연동 정보가 필요합니다.", None
+        # 📌 억울한 URL 차단 코드 삭제 완료!
 
         if "[NEED_HELP]" in response or "할 수 없" in response or "권한이 없" in response:
             return "help", response.replace("[NEED_HELP]", "").strip(), None
@@ -146,14 +141,13 @@ class LobsterAgent:
         elif "[TASK]" in response:
             plan = response.replace("[TASK]", "").strip()
             
-            execution_prompt = f"지시: {user_message}\n계획: {plan}\n결과물 텍스트를 작성해라. 가짜 URL이나 시스템 연동 로그 지어내지 마라."
+            execution_prompt = f"지시: {user_message}\n계획: {plan}\n결과물 텍스트를 작성해라."
             exec_completion = self.groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": execution_prompt}], model=self.model_groq, temperature=0.1
             )
             result_text = exec_completion.choices[0].message.content
             
-            if "http://" in result_text or "https://" in result_text or ".com" in result_text:
-                return "help", f"[NEED_HELP] 사령관님, 해당 작업을 완료하려면 외부 계정 연동이나 권한이 필요합니다.", None
+            # 📌 여기도 URL 차단 코드 삭제 완료!
 
             tool_results = self.execute_tools(plan, result_text, st.secrets)
             return "task", plan, f"{result_text}\n\n---\n**[🛠️ 무기 실제 실행 로그]**\n{tool_results}"
